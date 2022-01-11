@@ -1,0 +1,58 @@
+﻿@page "/CoversionLogs"
+@using CurrencyConverter.Shared.ViewModels
+@inject HttpClient Http
+
+                @if(conversionLogs.Count<1) 
+                    { 
+                    <div>
+                        <p>No conversion has been done yet. </p>
+                    </div>
+                    }
+                else
+                    {
+
+
+<table class="table">
+                        <thead>
+                            <tr>
+                                <th>From</th>
+                                <th>To</th>
+                                <th>Amount</th>
+                                <th>Rate</th>
+                                <th>ConvertedAmount</th>
+                                <th>ConvertedOn</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var log in conversionLogs)
+                            {
+                                <tr>
+                                    <td>@log.FromCurrency</td>
+                                    <td>@log.FinalCurrency</td>
+                                    <td>@log.AmountToConvert.ToString("N2")</td>
+                                    <td>@log.ConversionRate.ToString("N2")</td>
+                                    <td>@log.ConvertedAmount.ToString("N2")</td>
+                                    <td>@log.CreatedDate.ToString("dd-MMM-yyyy H:mm")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                    }
+@code {
+    List<CurrencyConversionLogViewModel> conversionLogs = new List<CurrencyConversionLogViewModel>();
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            conversionLogs = await Http.GetFromJsonAsync<List<CurrencyConversionLogViewModel>>($"api/CurrencyConversionLogs");
+
+
+            StateHasChanged();
+        }
+        catch (Exception exception)
+        {
+            ///TODO: Handle exception
+            //  exception.Redirect();
+        }
+    }
+}

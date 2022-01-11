@@ -1,0 +1,156 @@
+﻿@page "/"
+@inject HttpClient Http
+@using Newtonsoft.Json
+@using CurrencyConverter.Shared.ViewModels;
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.WebAssembly.Authentication
+
+<h5 class="m-2"> Currency Conversion App.!</h5>
+@if (isReversed)
+{
+    <p class="m-2"> 1 @currencyConversionCreateView.FinalCurrency = @ExchangeRate @currencyConversionCreateView.FromCurrency </p>
+}
+else
+{
+    <p class="m-2">  1 @currencyConversionCreateView.FromCurrency = @ExchangeRate @currencyConversionCreateView.FinalCurrency </p>
+}
+<div>
+    <EditForm Model="@currencyConversionCreateView">
+        @if (_isLoading)
+        {
+            <div class="d-flex justify-content-center">
+                <div class="spinner-border" role="status">
+                    <span class="sr-only">Loading...</span>
+                </div>
+            </div>
+        }
+        <div class=" row form-group m-1">
+            <div class="col-md-6">
+                <input type="number" value="@currencyConversionCreateView.AmountToConvert" @onchange=" async(ChangeEventArgs e) => { currencyConversionCreateView.AmountToConvert =  Convert.ToDouble(e.Value); await ConvertCurrency(false); }" min="0" class="form-control " />
+
+            </div>
+            <div class="col-md-6">
+                <select required value="@currencyConversionCreateView.FromCurrency" @onchange="async (ChangeEventArgs e) => { currencyConversionCreateView.FromCurrency = (string)e.Value; await  ConvertCurrency(false); }" class="form-control">
+                    <option value="" selected>Select Currency</option>
+                    @foreach (var item in currencies)
+                    {
+                        <option value="@item.ShortCode"> @item.ShortCode- @item.CountryName </option>
+                    }
+                </select>
+            </div>
+        </div>
+        <div class="clearfix"></div>
+        <div class=" row form-group m-1">
+            <div class="col-md-6">
+                <input type="number" value="@currencyConversionCreateView.ConvertedAmount" @onchange="async (ChangeEventArgs e) => {currencyConversionCreateView.ConvertedAmount = Convert.ToDouble(e.Value); await ConvertCurrency(true); }" min="0" class="form-control " />
+
+            </div>
+            <div class="col-md-6">
+                <select required value="@currencyConversionCreateView.FinalCurrency" @onchange="async (ChangeEventArgs e) => {currencyConversionCreateView.FinalCurrency = (string)e.Value;await   ConvertCurrency(false); }" class="form-control">
+                    <option value="" selected>Select Currency</option>
+                    @foreach (var item in currencies)
+                    {
+                        <option value="@item.ShortCode"> @item.ShortCode- @item.CountryName </option>
+                    }
+                </select>
+            </div>
+        </div>
+
+    </EditForm>
+</div>
+
+@code
+{
+    public double ExchangeRate { get; set; }
+    public bool _isLoading { get; set; }
+    public bool isReversed { get; set; }
+    CurrencyConversionCreateViewModel currencyConversionCreateView = new CurrencyConversionCreateViewModel();
+    List<CurrencyViewModel> currencies = new List<CurrencyViewModel>();
+    protected override async Task OnInitializedAsync()
+    {
+        _isLoading = true;
+        try
+        {
+            await LoadCurrencies();
+        }
+        catch (AccessTokenNotAvailableException exception)
+        {
+            _isLoading = false;
+            StateHasChanged();
+            exception.Redirect();
+        }
+    }
+    public async Task LoadCurrencies()
+    {
+        currencies = await Http.GetFromJsonAsync<List<CurrencyViewModel>>($"api/CurrencyConverters/GetAllCurrencies");
+        _isLoading = false;
+        StateHasChanged();
+    }
+
+    public async Task ConvertCurrency(bool reversed)
+    {
+        isReversed = reversed;
+
+        StateHasChanged();
+        if (currencyConversionCreateView.FinalCurrency != null && currencyConversionCreateView.FromCurrency != null)
+        {
+
+            _isLoading = true;
+
+            if (reversed) //this means change was done on the to textbox.
+            {
+                //var FromCurrency = currencyConversionCreateView.FinalCurrency;
+                //var FinalCurrency = currencyConversionCreateView.FromCurrency;
+                currencyConversionCreateView = new CurrencyConversionCreateViewModel()
+                {
+                    AmountToConvert = currencyConversionCreateView.ConvertedAmount,
+                    FinalCurrency = currencyConversionCreateView.FromCurrency,
+                    FromCurrency = currencyConversionCreateView.FinalCurrency
+                };
+                StateHasChanged();
+            }
+
+            try
+            {
+                Console.WriteLine("Value has changed");
+
+                var response = await Http.PostAsJsonAsync("api/CurrencyConverters/Convert", currencyConversionCreateView);
+                if (response.IsSuccessStatusCode)
+                {
+                    var responseText = await response.Content.ReadAsStringAsync();
+                    var exchangeRate = JsonConvert.DeserializeObject<string>(responseText);
+                    ExchangeRate = Convert.ToDouble(exchangeRate);
+                    if (reversed)
+                    {
+                        var oldValue = currencyConversionCreateView.FinalCurrency;
+
+                        currencyConversionCreateView.FinalCurrency = currencyConversionCreateView.FromCurrency;
+                        currencyConversionCreateView.FromCurrency = oldValue;
+                        currencyConversionCreateView.ConvertedAmount = currencyConversionCreateView.AmountToConvert; ;
+                        currencyConversionCreateView.AmountToConvert = ExchangeRate * (currencyConversionCreateView.ConvertedAmount == 0 ? 1 : currencyConversionCreateView.ConvertedAmount);
+                    }
+                    else
+                        currencyConversionCreateView.ConvertedAmount = ExchangeRate * (currencyConversionCreateView.AmountToConvert == 0 ? 1 : currencyConversionCreateView.AmountToConvert);
+
+                    _isLoading = false;
+
+                    StateHasChanged();
+
+                }
+                else
+                {
+                    _isLoading = false;
+                    StateHasChanged();
+                }
+            }
+            catch (Exception exception)
+            {
+                _isLoading = false;
+                StateHasChanged();
+
+
+            }
+        }
+
+    }
+}
